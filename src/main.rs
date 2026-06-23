@@ -1,5 +1,6 @@
 use {
     anyhow::{Context, Result},
+    base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD},
     clap::Parser,
     gepas::{
         audio::{AudioFormat, PlaybackOrder, assemble},
@@ -8,7 +9,11 @@ use {
         sentence::{GrammarSelection, Level, to_jsonl},
         validation::{ValidationOptions, validate},
     },
-    std::{env, fs, path::PathBuf},
+    std::{
+        env, fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    },
 };
 
 const DEFAULT_TOPIC: &str = "varied everyday situations";
@@ -29,7 +34,7 @@ struct Cli {
     text_only: bool,
 
     /// Number of sentence pairs to generate.
-    #[arg(long, default_value_t = 3)] // todo: change default back to 100
+    #[arg(long, default_value_t = 10)]
     count: usize,
 
     /// OpenAI model used to generate sentence pairs.
@@ -109,6 +114,13 @@ fn main() -> Result<()> {
             instructions: INSTRUCTIONS,
         },
     )?;
+    for (index, pair) in generated.iter().enumerate() {
+        println!(
+            "Generated sentence {}: {}",
+            index + 1,
+            serde_json::to_string(pair)?
+        );
+    }
     let validation = validate(
         generated,
         ValidationOptions {
@@ -194,6 +206,23 @@ fn main() -> Result<()> {
     if has_character_count {
         println!("ElevenLabs reported {total_characters} characters used");
     }
+    let audio_output_name = if cli.format == AudioFormat::Mp3 {
+        let seconds = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .context("system clock is before the Unix epoch")?
+            .as_secs();
+        let bytes = seconds.to_be_bytes();
+        let first_nonzero = bytes
+            .iter()
+            .position(|byte| *byte != 0)
+            .unwrap_or(bytes.len() - 1);
+        format!(
+            "{output_name}-{}",
+            URL_SAFE_NO_PAD.encode(&bytes[first_nonzero..])
+        )
+    } else {
+        output_name.clone()
+    };
     assemble(
         &clips_dir,
         &cli.output_dir,
@@ -201,7 +230,7 @@ fn main() -> Result<()> {
         cli.order,
         cli.pause_ms,
         cli.format,
-        &output_name,
+        &audio_output_name,
     )?;
     Ok(())
 }

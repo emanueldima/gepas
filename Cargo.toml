@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0"
+base64 = "0.22"
 clap = { version = "4.5", features = ["derive"] }
 hound = "3.5"
 lingua = { version = "1.8", default-features = false, features = ["english", "german"] }
